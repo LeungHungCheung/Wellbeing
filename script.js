@@ -1,10 +1,10 @@
 /* ==========================================================
-   Read Receipt — interactive logic
+   Read Receipt - interactive logic
    ----------------------------------------------------------
    Session timeline (5 min total, starts when rules are accepted):
-     0:00 – 2:00   chatbot replies normally
-     2:00 – 4:00   chatbot ghosts (typing bubble loops, stays online)
-     4:00 – 5:00   chatbot comes back and replies normally
+     0:00 - 2:00   chatbot replies normally
+     2:00 - 4:00   chatbot ghosts (typing bubble loops, stays online)
+     4:00 - 5:00   chatbot comes back and replies normally
      5:00          "Section End" popup -> OK -> forum -> mandatory comment
 
    Testing shortcut: open index.html?fast=20 to run everything 20x faster.
@@ -45,8 +45,14 @@
   const commentName = $('commentName');
   const commentText = $('commentText');
   const commentPost = $('commentPost');
-  const commentCancel = $('commentCancel');
   const commentList = $('commentList');
+  const sendBtn = $('sendBtn');
+  const replyView = $('replyView');
+  const replyTarget = $('replyTarget');
+  const replyForm = $('replyForm');
+  const replyText = $('replyText');
+  const replyPost = $('replyPost');
+  const replyBack = $('replyBack');
 
   /* ---------------- State ---------------- */
   let startTime = 0;
@@ -58,13 +64,15 @@
   let ghostMessages = 0;       // user messages sent while being ghosted
   let comebackPending = false;
   let userMessageCount = 0;
-  let firstCommentDone = false;
+  let participantName = 'Anonymous';
+  let replyingTo = null;
 
   /* ==========================================================
      Tabs
      ========================================================== */
   function switchTab(name) {
     const forum = name === 'forum';
+    if (!forum) closeReply();
     viewConversation.classList.toggle('hidden', forum);
     viewForum.classList.toggle('hidden', !forum);
     tabConversation.classList.toggle('active', !forum);
@@ -139,6 +147,7 @@
     hideTyping();
     input.disabled = true;
     input.placeholder = 'This conversation has ended.';
+    updateSendBtn();
     endModal.classList.remove('hidden');
   }
 
@@ -146,7 +155,7 @@
     endModal.classList.add('hidden');
     tabForum.disabled = false;
     switchTab('forum');
-    openCommentModal(true); // mandatory the first time
+    openCommentModal(); // mandatory, one comment per participant
   });
 
   /* ==========================================================
@@ -160,7 +169,13 @@
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 180) + 'px';
+    updateSendBtn();
   });
+
+  // The arrow is dimmed until there is something to send
+  function updateSendBtn() {
+    sendBtn.disabled = input.disabled || input.value.trim() === '';
+  }
 
   function send() {
     const text = input.value.trim();
@@ -168,6 +183,8 @@
 
     input.value = '';
     input.style.height = 'auto';
+    updateSendBtn();
+    input.focus();
     chat.classList.remove('is-new');
 
     addUser(text);
@@ -184,6 +201,7 @@
     el.className = 'msg user';
     el.textContent = text;
     messages.appendChild(el);
+    keepTypingLast();
     scrollDown();
   }
 
@@ -191,9 +209,8 @@
     const el = document.createElement('div');
     el.className = 'msg bot';
     el.textContent = text;
-    // keep the typing bubble (if any) as the last item
-    if (typingEl && typingEl.parentNode) messages.insertBefore(el, typingEl);
-    else messages.appendChild(el);
+    messages.appendChild(el);
+    keepTypingLast();
     scrollDown();
   }
 
@@ -206,6 +223,7 @@
       readEl.textContent = 'Read';
       const lastUser = [...messages.querySelectorAll('.msg.user')].pop();
       if (lastUser) lastUser.after(readEl);
+      keepTypingLast();
       scrollDown();
     }, 900 / SCALE);
   }
@@ -221,6 +239,10 @@
     typingEl.innerHTML = '<i></i><i></i><i></i>';
     messages.appendChild(typingEl);
     scrollDown();
+  }
+  // The typing bubble always sits at the very bottom, below every message
+  function keepTypingLast() {
+    if (typingEl && typingEl.parentNode) messages.appendChild(typingEl);
   }
   function hideTyping() {
     if (typingEl) typingEl.remove();
@@ -277,22 +299,22 @@
 
   const RULES = [
     [/(are you|r u|you a).*(bot|ai|human|real|robot|person|machine)|who are you|what are you/i,
-      ["does it matter? 🙂 I'm just here to chat. what's on your mind?",
+      ["does it matter? \u{1F642} I'm just here to chat. what's on your mind?",
        "haha why do you ask? I'm just someone to talk to right now"]],
     [/your name|what.?s your name|call you/i,
       ["I'd rather not say, kinda like it better this way. what should I call you?"]],
     [/\b(hi|hello|hey|yo|sup)\b/i,
-      ["hey 🙂 how's it going?"]],
+      ["hey \u{1F642} how's it going?"]],
     [/\b(thank you|thanks|thx)\b/i,
-      ["no worries 🙂"]],
+      ["no worries \u{1F642}"]],
     [/\b(tired|exhausted|sleepy|drained)\b/i,
       ["same, honestly. long day?", "ugh, I feel that. did you get any rest at all?"]],
     [/\b(sad|bad|stress|stressed|anxious|angry|awful|terrible|hate|upset|worst)\b/i,
       ["that sounds rough. do you want to talk about it?", "I'm sorry, that doesn't sound easy. what happened?"]],
     [/\b(happy|great|good|amazing|love|fun|nice|awesome|fine)\b/i,
-      ["that's nice to hear. what made it good?", "love that for you 🙂 anything in particular?"]],
+      ["that's nice to hear. what made it good?", "love that for you \u{1F642} anything in particular?"]],
     [/\b(lol|haha|hehe|lmao)\b/i,
-      ["haha 😄", "😄 okay that made me smile"]],
+      ["haha \u{1F604}", "\u{1F604} okay that made me smile"]],
     [/\bwhy\b/i,
       ["hmm, good question. I'm not sure I have a clear answer. what do you think?"]],
   ];
@@ -331,31 +353,46 @@
 
   /* ==========================================================
      Forum
+     - each participant writes ONE comment (mandatory, no "add comment" later)
+     - every comment has a bubble icon: click it to reply
      ========================================================== */
+  const BUBBLE_SVG =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3A9 9 0 1 0 17.5 19.2L21.5 21.5L19.6 17.1A9 9 0 0 0 12 3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+
   // Sample comments so the forum is not empty on day one.
   // Replace / delete these as you like.
   const SEED = [
-    { name: 'Mia',       ts: new Date(2026, 9, 24, 14, 32).getTime(),
-      text: 'It felt strange when they stopped replying. I kept staring at the dots waiting for something to happen.' },
-    { name: 'Jason',     ts: new Date(2026, 9, 24, 16, 5).getTime(),
-      text: "I didn't think I'd care that much. Two minutes felt like forever though." },
-    { name: 'Anonymous', ts: new Date(2026, 9, 25, 11, 48).getTime(),
-      text: 'At first it was just a normal chat. Then silence. I typed three more messages and none got an answer.' },
-    { name: 'Chloe',     ts: new Date(2026, 9, 25, 15, 20).getTime(),
-      text: "When they came back I didn't know whether to be angry or relieved." },
+    { id: 's1', name: 'Mia', ts: new Date(2026, 9, 24, 14, 32).getTime(),
+      text: 'It felt strange when they stopped replying. I kept staring at the dots waiting for something to happen.',
+      replies: [
+        { name: 'Jason', ts: new Date(2026, 9, 24, 17, 10).getTime(), text: 'Same here. I almost typed an apology.' }
+      ] },
+    { id: 's2', name: 'Jason', ts: new Date(2026, 9, 24, 16, 5).getTime(),
+      text: "I didn't think I'd care that much. Two minutes felt like forever though.", replies: [] },
+    { id: 's3', name: 'Anonymous', ts: new Date(2026, 9, 25, 11, 48).getTime(),
+      text: 'At first it was just a normal chat. Then silence. I typed three more messages and none got an answer.', replies: [] },
+    { id: 's4', name: 'Chloe', ts: new Date(2026, 9, 25, 15, 20).getTime(),
+      text: "When they came back I didn't know whether to be angry or relieved.", replies: [] },
   ];
 
   function loadComments() {
+    let data = null;
     try {
       if (params.has('clear')) localStorage.removeItem(STORAGE_KEY);
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (_) { /* storage unavailable */ }
-    return SEED.slice();
+      if (raw) data = JSON.parse(raw);
+    } catch (e) { data = null; }
+    if (!Array.isArray(data)) data = JSON.parse(JSON.stringify(SEED));
+    data.forEach((c, i) => {
+      if (!c.id) c.id = 'c' + i + '-' + c.ts;
+      if (!Array.isArray(c.replies)) c.replies = [];
+    });
+    return data;
   }
   function saveComments() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(comments)); } catch (_) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(comments)); } catch (e) { /* ignore */ }
   }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
   let comments = loadComments();
 
@@ -368,28 +405,61 @@
     const month = d.toLocaleString('en-US', { month: 'short' });
     const hh = String(d.getHours()).padStart(2, '0');
     const mm = String(d.getMinutes()).padStart(2, '0');
-    return `${month} ${ordinal(d.getDate())}, ${d.getFullYear()} ${hh}:${mm}`;
+    return month + ' ' + ordinal(d.getDate()) + ', ' + d.getFullYear() + ' ' + hh + ':' + mm;
+  }
+
+  function textEl(item) {
+    const p = document.createElement('p');
+    p.className = 'comment-text';
+    p.textContent = item.text;
+    return p;
+  }
+  function metaEl(item) {
+    const meta = document.createElement('div');
+    meta.className = 'comment-meta';
+    const n = document.createElement('span'); n.textContent = item.name || 'Anonymous';
+    const t = document.createElement('span'); t.textContent = formatTime(item.ts);
+    meta.append(n, t);
+    return meta;
   }
 
   function renderComments() {
     commentList.innerHTML = '';
     [...comments].sort((a, b) => b.ts - a.ts).forEach((c) => {
       const li = document.createElement('li');
-      const p = document.createElement('p');
-      p.className = 'comment-text';
-      p.textContent = c.text;
-      const meta = document.createElement('div');
-      meta.className = 'comment-meta';
-      const n = document.createElement('span'); n.textContent = c.name || 'Anonymous';
-      const t = document.createElement('span'); t.textContent = formatTime(c.ts);
-      meta.append(n, t);
-      li.append(p, meta);
+
+      const row = document.createElement('div');
+      row.className = 'comment-row';
+      const main = document.createElement('div');
+      main.className = 'comment-main';
+      main.append(textEl(c), metaEl(c));
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'reply-btn';
+      btn.setAttribute('aria-label', 'Reply to this comment');
+      btn.innerHTML = BUBBLE_SVG + (c.replies.length ? '<span class="reply-count">' + c.replies.length + '</span>' : '');
+      btn.addEventListener('click', () => openReply(c.id));
+
+      row.append(main, btn);
+      li.appendChild(row);
+
+      if (c.replies.length) {
+        const ul = document.createElement('ul');
+        ul.className = 'replies';
+        c.replies.forEach((r) => {
+          const rli = document.createElement('li');
+          rli.append(textEl(r), metaEl(r));
+          ul.appendChild(rli);
+        });
+        li.appendChild(ul);
+      }
       commentList.appendChild(li);
     });
   }
 
-  function openCommentModal(mandatory) {
-    commentCancel.classList.toggle('hidden', !!mandatory);
+  /* ---- First (mandatory) comment ---- */
+  function openCommentModal() {
     commentText.value = '';
     commentPost.disabled = true;
     commentModal.classList.remove('hidden');
@@ -399,25 +469,54 @@
   commentText.addEventListener('input', () => {
     commentPost.disabled = commentText.value.trim().length === 0;
   });
-  commentCancel.addEventListener('click', () => commentModal.classList.add('hidden'));
-  $('addCommentBtn').addEventListener('click', () => openCommentModal(false));
 
   commentForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = commentText.value.trim();
     if (!text) return;
-    comments.push({ name: commentName.value.trim() || 'Anonymous', ts: Date.now(), text });
+    participantName = commentName.value.trim() || 'Anonymous';
+    comments.push({ id: uid(), name: participantName, ts: Date.now(), text: text, replies: [] });
     saveComments();
     renderComments();
     commentModal.classList.add('hidden');
-    firstCommentDone = true;
   });
 
-  // Block closing the mandatory popup with Escape
+  /* ---- Replying: one comment in focus, the forum blurred behind ---- */
+  function openReply(id) {
+    const c = comments.find((x) => x.id === id);
+    if (!c) return;
+    replyingTo = id;
+    replyTarget.innerHTML = '';
+    replyTarget.append(textEl(c), metaEl(c));
+    replyText.value = '';
+    replyPost.disabled = true;
+    replyView.classList.remove('hidden');
+    replyText.focus();
+  }
+  function closeReply() {
+    replyingTo = null;
+    replyView.classList.add('hidden');
+  }
+
+  replyBack.addEventListener('click', closeReply);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !firstCommentDone && phase === 'ended' && !commentModal.classList.contains('hidden')) {
-      e.preventDefault();
-    }
+    if (e.key === 'Escape' && replyingTo) closeReply();
+  });
+  replyText.addEventListener('input', () => {
+    replyPost.disabled = replyText.value.trim().length === 0;
+  });
+  replyText.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); replyForm.requestSubmit(); }
+  });
+  replyForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = replyText.value.trim();
+    const c = comments.find((x) => x.id === replyingTo);
+    if (!text || !c) return;
+    c.replies.push({ name: participantName, ts: Date.now(), text: text });
+    saveComments();
+    renderComments();
+    closeReply();
   });
 
   renderComments();

@@ -1,5 +1,5 @@
 /* ==========================================================
-   Read Receipt — styles
+   Read Receipt - styles
    Conversation tab: dark, like Claude's "new chat" page
    Forum tab: light, plain list (name + time)
    ========================================================== */
@@ -171,15 +171,30 @@ main { height: 100%; padding-top: var(--topbar-h); }
   30%           { background: #c0c0c5; transform: scale(1.06); }
 }
 
+/* Never let the flex column squash bubbles or messages */
+.msg, .read, .typing { flex-shrink: 0; }
+
 /* ---------- Composer (type box only) ---------- */
 .composer {
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 18px;
-  padding: 16px 20px 14px;
+  padding: 16px 20px 58px;
+  position: relative;
   box-shadow: 0 6px 24px rgba(0,0,0,.25);
 }
+.send-btn {
+  position: absolute; right: 12px; bottom: 12px;
+  width: 38px; height: 38px; padding: 0;
+  border-radius: 50%;
+  background: #f2f2f2;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .2s, transform .1s;
+}
+.send-btn svg { width: 20px; height: 20px; }
+.send-btn:active:not(:disabled) { transform: scale(.94); }
+.send-btn:disabled { opacity: .3; cursor: default; }
 .composer textarea {
   width: 100%; resize: none; border: 0; outline: 0;
   background: transparent; color: var(--text);
@@ -194,8 +209,27 @@ main { height: 100%; padding-top: var(--topbar-h); }
 .forum-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; }
 .forum-head h2 { margin: 0; font-size: 56px; font-weight: 700; letter-spacing: -.02em; }
 .comment-list { list-style: none; margin: 0; padding: 0; }
-.comment-list li { padding: 26px 0; border-top: 1px solid #f0f0f0; animation: pop .3s ease-out; }
+.comment-list > li { padding: 26px 0; border-top: 1px solid #f0f0f0; animation: pop .3s ease-out; }
+.comment-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.comment-main { min-width: 0; flex: 1; }
 .comment-text { margin: 0 0 10px; font-size: 22px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* Reply bubble at the right end of each comment */
+.reply-btn {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; border-radius: 12px;
+  background: transparent; color: #111;
+  transition: background .2s;
+}
+.reply-btn:hover { background: #f2f2f2; }
+.reply-btn svg { width: 28px; height: 28px; }
+.reply-count { font-size: 15px; font-weight: 600; color: #666; }
+
+/* Replies shown under their comment */
+.replies { list-style: none; margin: 18px 0 0; padding: 0 0 0 22px; border-left: 3px solid #eee; }
+.replies li { padding: 10px 0; }
+.replies .comment-text { font-size: 18px; font-weight: 500; margin-bottom: 6px; }
+.replies .comment-meta { font-size: 14px; }
 .comment-meta { color: var(--muted); font-size: 16px; }
 .comment-meta span + span { margin-left: 14px; }
 
@@ -232,6 +266,38 @@ main { height: 100%; padding-top: var(--topbar-h); }
 .modal-light textarea { resize: vertical; min-height: 120px; }
 .modal-light input:focus, .modal-light textarea:focus { border-color: var(--indigo); background: #fff; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Reply view: forum stays behind, blurred */
+.overlay-blur {
+  background: rgba(255,255,255,.55);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.reply-panel {
+  width: min(720px, 100%);
+  max-height: 100%; overflow-y: auto;
+  background: #fff; color: #111;
+  border-radius: 20px;
+  padding: 26px 30px 30px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.15);
+  animation: pop .25s ease-out;
+}
+.back-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: transparent; color: #666;
+  padding: 6px 10px 6px 0; margin-bottom: 18px;
+  font-size: 16px; font-weight: 600;
+}
+.back-btn:hover { color: #111; }
+.back-btn svg { width: 20px; height: 20px; }
+.reply-target { padding-bottom: 22px; margin-bottom: 20px; border-bottom: 1px solid #f0f0f0; }
+.reply-panel textarea {
+  width: 100%; display: block; resize: vertical; min-height: 100px;
+  border: 1px solid #e0e0e0; border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 14px;
+  font-size: 16px; color: #111; background: #fafafa; outline: none;
+}
+.reply-panel textarea:focus { border-color: var(--indigo); background: #fff; }
 
 @media (max-width: 600px) {
   .forum-head h2 { font-size: 40px; }

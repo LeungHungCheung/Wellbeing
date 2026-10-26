@@ -48,7 +48,10 @@
         <div id="messages" class="messages" aria-live="polite"></div>
 
         <form id="composer" class="composer" autocomplete="off">
-          <textarea id="input" rows="2" placeholder="Type a message…" aria-label="Type a message"></textarea>
+          <textarea id="input" rows="2" placeholder="Type a message..." aria-label="Type a message"></textarea>
+          <button type="submit" id="sendBtn" class="send-btn" aria-label="Send" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </form>
       </div>
     </section>
@@ -58,7 +61,6 @@
       <div class="forum-wrap">
         <div class="forum-head">
           <h2>Forum</h2>
-          <button id="addCommentBtn" class="btn btn-indigo">Add a comment</button>
         </div>
         <ul id="commentList" class="comment-list"></ul>
       </div>
@@ -94,12 +96,28 @@
     <form id="commentForm" class="modal modal-light" role="dialog" aria-modal="true" aria-labelledby="commentTitle">
       <h3 id="commentTitle">How was your experience?</h3>
       <input id="commentName" type="text" maxlength="30" placeholder="Name (optional)" autocomplete="off">
-      <textarea id="commentText" rows="5" maxlength="1000" placeholder="Write your comment…"></textarea>
+      <textarea id="commentText" rows="5" maxlength="1000" placeholder="Write your comment..."></textarea>
       <div class="modal-actions">
-        <button type="button" id="commentCancel" class="btn btn-ghost hidden">Cancel</button>
         <button type="submit" id="commentPost" class="btn btn-indigo" disabled>Post</button>
       </div>
     </form>
+  </div>
+
+  <!-- 4. Reply view: focuses one comment, everything else is blurred -->
+  <div id="replyView" class="overlay overlay-blur hidden">
+    <div class="reply-panel" role="dialog" aria-modal="true" aria-label="Reply to comment">
+      <button type="button" id="replyBack" class="back-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back
+      </button>
+      <div id="replyTarget" class="reply-target"></div>
+      <form id="replyForm" autocomplete="off">
+        <textarea id="replyText" rows="4" maxlength="1000" placeholder="Write a reply..."></textarea>
+        <div class="modal-actions">
+          <button type="submit" id="replyPost" class="btn btn-indigo" disabled>Reply</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="script.js"></script>

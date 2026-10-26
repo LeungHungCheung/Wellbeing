@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Read Receipt</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+
+  <!-- Top bar: only two tabs -->
+  <header class="topbar">
+    <nav class="tabs">
+      <button class="tab active" id="tabConversation" data-tab="conversation">Conversation</button>
+      <button class="tab" id="tabForum" data-tab="forum" disabled>Forum</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ============ CONVERSATION TAB ============ -->
+    <section id="conversation" class="view">
+
+      <!-- Landing: only a start button -->
+      <div id="landing" class="landing">
+        <button id="startBtn" class="btn btn-light">Start conversation</button>
+      </div>
+
+      <!-- Chat (hidden until the rules are accepted) -->
+      <div id="chat" class="chat is-new hidden">
+        <div class="status" id="status"><span class="status-dot"></span>Online</div>
+
+        <div class="welcome">
+          <svg class="star" viewBox="0 0 100 100" aria-hidden="true">
+            <g stroke="#d97757" stroke-width="9" stroke-linecap="round">
+              <line x1="50" y1="8"  x2="50" y2="92"/>
+              <line x1="8"  y1="50" x2="92" y2="50"/>
+              <line x1="20" y1="20" x2="80" y2="80"/>
+              <line x1="80" y1="20" x2="20" y2="80"/>
+              <line x1="33" y1="12" x2="67" y2="88"/>
+              <line x1="67" y1="12" x2="33" y2="88"/>
+              <line x1="12" y1="33" x2="88" y2="67"/>
+              <line x1="12" y1="67" x2="88" y2="33"/>
+            </g>
+          </svg>
+          <h1>How is your day !</h1>
+        </div>
+
+        <div id="messages" class="messages" aria-live="polite"></div>
+
+        <form id="composer" class="composer" autocomplete="off">
+          <textarea id="input" rows="2" placeholder="Type a message…" aria-label="Type a message"></textarea>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ FORUM TAB ============ -->
+    <section id="forum" class="view hidden">
+      <div class="forum-wrap">
+        <div class="forum-head">
+          <h2>Forum</h2>
+          <button id="addCommentBtn" class="btn btn-indigo">Add a comment</button>
+        </div>
+        <ul id="commentList" class="comment-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ POPUPS ============ -->
+  <!-- 1. Rules -->
+  <div id="rulesModal" class="overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <h3 id="rulesTitle">Rules</h3>
+      <ol class="rules">
+        <li>You can only use the computer in the installation area.</li>
+        <li>You must stay inside the red circle.</li>
+        <li>The installation section will last for 5 minutes.</li>
+        <li>All your belongings should be put away.</li>
+        <li>Enjoy the chat with someone! You can say anything you want.</li>
+      </ol>
+      <button id="rulesOk" class="btn btn-light">OK</button>
+    </div>
+  </div>
+
+  <!-- 2. Section End -->
+  <div id="endModal" class="overlay hidden">
+    <div class="modal modal-center" role="dialog" aria-modal="true" aria-labelledby="endTitle">
+      <h3 id="endTitle">Section End</h3>
+      <button id="endOk" class="btn btn-light">OK</button>
+    </div>
+  </div>
+
+  <!-- 3. Forum comment (mandatory the first time) -->
+  <div id="commentModal" class="overlay hidden">
+    <form id="commentForm" class="modal modal-light" role="dialog" aria-modal="true" aria-labelledby="commentTitle">
+      <h3 id="commentTitle">How was your experience?</h3>
+      <input id="commentName" type="text" maxlength="30" placeholder="Name (optional)" autocomplete="off">
+      <textarea id="commentText" rows="5" maxlength="1000" placeholder="Write your comment…"></textarea>
+      <div class="modal-actions">
+        <button type="button" id="commentCancel" class="btn btn-ghost hidden">Cancel</button>
+        <button type="submit" id="commentPost" class="btn btn-indigo" disabled>Post</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

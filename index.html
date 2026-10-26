@@ -10,10 +10,16 @@
 
   <!-- Top bar: only two tabs -->
   <header class="topbar">
+    <div class="clock chrome" id="clock" aria-label="Current date and time">
+      <span id="clockDate"></span><span id="clockTime"></span>
+    </div>
     <nav class="tabs">
       <button class="tab active" id="tabConversation" data-tab="conversation">Conversation</button>
       <button class="tab" id="tabForum" data-tab="forum" disabled>Forum</button>
     </nav>
+    <button type="button" id="helpBtn" class="help-btn chrome" aria-label="About this website">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M9.1 9.3a3 3 0 1 1 4.2 2.7c-.9.5-1.3 1.1-1.3 2v.3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.3" fill="currentColor"/></svg>
+    </button>
   </header>
 
   <main>
@@ -27,28 +33,17 @@
 
       <!-- Chat (hidden until the rules are accepted) -->
       <div id="chat" class="chat is-new hidden">
-        <div class="status" id="status"><span class="status-dot"></span>Online</div>
+        <div class="status" id="status"><span class="status-dot"></span><span id="statusText">Online</span></div>
 
         <div class="welcome">
-          <svg class="star" viewBox="0 0 100 100" aria-hidden="true">
-            <g stroke="#d97757" stroke-width="9" stroke-linecap="round">
-              <line x1="50" y1="8"  x2="50" y2="92"/>
-              <line x1="8"  y1="50" x2="92" y2="50"/>
-              <line x1="20" y1="20" x2="80" y2="80"/>
-              <line x1="80" y1="20" x2="20" y2="80"/>
-              <line x1="33" y1="12" x2="67" y2="88"/>
-              <line x1="67" y1="12" x2="33" y2="88"/>
-              <line x1="12" y1="33" x2="88" y2="67"/>
-              <line x1="12" y1="67" x2="88" y2="33"/>
-            </g>
-          </svg>
-          <h1>How is your day !</h1>
+          <h1>Anonymous Chat with Strangers</h1>
         </div>
 
         <div id="messages" class="messages" aria-live="polite"></div>
 
         <form id="composer" class="composer" autocomplete="off">
           <textarea id="input" rows="2" placeholder="Type a message..." aria-label="Type a message"></textarea>
+          <button type="button" class="emoji-btn emoji-composer" data-emoji-for="input" aria-label="Insert emoji"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.8" cy="9.6" r="1.4" fill="currentColor"/><circle cx="15.2" cy="9.6" r="1.4" fill="currentColor"/><path d="M7 13.6h10a5 5 0 0 1-10 0z" fill="currentColor"/></svg></button>
           <button type="submit" id="sendBtn" class="send-btn" aria-label="Send" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -61,6 +56,7 @@
       <div class="forum-wrap">
         <div class="forum-head">
           <h2>Forum</h2>
+          <h3>Share your feelings in here !</h3>
         </div>
         <ul id="commentList" class="comment-list"></ul>
       </div>
@@ -98,6 +94,7 @@
       <input id="commentName" type="text" maxlength="30" placeholder="Name (optional)" autocomplete="off">
       <textarea id="commentText" rows="5" maxlength="1000" placeholder="Write your comment..."></textarea>
       <div class="modal-actions">
+        <button type="button" class="emoji-btn" data-emoji-for="commentText" aria-label="Insert emoji"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.8" cy="9.6" r="1.4" fill="currentColor"/><circle cx="15.2" cy="9.6" r="1.4" fill="currentColor"/><path d="M7 13.6h10a5 5 0 0 1-10 0z" fill="currentColor"/></svg></button>
         <button type="submit" id="commentPost" class="btn btn-indigo" disabled>Post</button>
       </div>
     </form>
@@ -114,11 +111,30 @@
       <form id="replyForm" autocomplete="off">
         <textarea id="replyText" rows="4" maxlength="1000" placeholder="Write a reply..."></textarea>
         <div class="modal-actions">
+          <button type="button" class="emoji-btn" data-emoji-for="replyText" aria-label="Insert emoji"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.8" cy="9.6" r="1.4" fill="currentColor"/><circle cx="15.2" cy="9.6" r="1.4" fill="currentColor"/><path d="M7 13.6h10a5 5 0 0 1-10 0z" fill="currentColor"/></svg></button>
           <button type="submit" id="replyPost" class="btn btn-indigo" disabled>Reply</button>
         </div>
       </form>
     </div>
   </div>
+
+  <!-- 5. Help / about: everything else is blurred -->
+  <div id="helpView" class="overlay overlay-help hidden">
+    <div class="help-panel" role="dialog" aria-modal="true" aria-label="About this website">
+      <button type="button" id="helpBack" class="back-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Back
+      </button>
+      <p class="help-text">Waiting Dilemma translates the hypervigilant loop of anxious attachment into a participatory spatial experience. In digital communication, interface cues&mdash;typing bubbles, read receipts, and abrupt silence&mdash;turn pauses into acute sites of psychological projection.</p>
+      <p class="help-tagline">Understanding yourself and others through experience !</p>
+    </div>
+  </div>
+
+  <!-- Back to top (Forum only) -->
+  <button type="button" id="backTop" class="back-top" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#4a4a4a"/><path d="M12 18V8M7.5 12.2 12 7.6l4.5 4.6" fill="none" stroke="#d4d4d4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Back to Top</span>
+  </button>
 
   <script src="script.js"></script>
 </body>

@@ -1,7 +1,7 @@
 /* ==========================================================
    Read Receipt - interactive logic
    ----------------------------------------------------------
-   Session timeline (5 min total, starts when rules are accepted):
+   Session timeline (5 min total, starts when the FIRST MESSAGE is sent):
      0:00 - 2:00   chatbot replies normally
      2:00 - 4:00   chatbot ghosts (typing bubble loops, stays online)
      4:00 - 5:00   chatbot comes back and replies normally
@@ -53,10 +53,17 @@
   const replyText = $('replyText');
   const replyPost = $('replyPost');
   const replyBack = $('replyBack');
+  const statusText = $('statusText');
+  const helpBtn = $('helpBtn');
+  const helpView = $('helpView');
+  const helpBack = $('helpBack');
+  const backTop = $('backTop');
+  const clockDate = $('clockDate');
+  const clockTime = $('clockTime');
 
   /* ---------------- State ---------------- */
   let startTime = 0;
-  let phase = 'idle';          // idle | talk1 | ghost | talk2 | ended
+  let phase = 'idle';          // idle | ready | talk1 | ghost | talk2 | ended
   let tickTimer = null;
   let pendingTimers = [];      // timers for a reply that is being "typed"
   let typingEl = null;
@@ -92,15 +99,36 @@
     rulesModal.classList.add('hidden');
     landing.classList.add('hidden');
     chat.classList.remove('hidden');
-    startSession();
+    phase = 'ready';           // waiting for the first message; clock not started yet
+    startOnlineCounter();
     input.focus();
   });
 
+  // Called when the participant sends their first message
   function startSession() {
+    stopOnlineCounter();
+    statusText.textContent = 'Online';
     startTime = Date.now();
     phase = 'talk1';
     tickTimer = setInterval(tick, 200);
   }
+
+  /* ---- "Current Online Users: x" (before the first message) ---- */
+  let onlineTimer = null;
+  let onlineCount = 0;
+  function startOnlineCounter() {
+    onlineCount = Math.round(rand(900, 7500));
+    renderOnline();
+    onlineTimer = setInterval(() => {
+      // small drift: slightly up or slightly down, about 0.2% - 1.5%
+      const step = Math.max(1, Math.round(onlineCount * rand(0.002, 0.015)));
+      onlineCount += Math.random() < 0.5 ? -step : step;
+      onlineCount = Math.min(9999, Math.max(100, onlineCount));
+      renderOnline();
+    }, 3000);
+  }
+  function renderOnline() { statusText.textContent = 'Current Online Users: ' + onlineCount; }
+  function stopOnlineCounter() { clearInterval(onlineTimer); onlineTimer = null; }
 
   /* ==========================================================
      Session clock + phases
@@ -124,11 +152,20 @@
   // Bot stops replying: cancel anything in progress, loop the typing bubble.
   function beginGhosting() {
     cancelPending();
-    showTyping();
+    ghostLoop();
+  }
+
+  // While ghosting, the bubble randomly appears and disappears,
+  // as if the other person keeps starting to type and then stops.
+  function ghostLoop() {
+    if (phase !== 'ghost') return;
+    if (Math.random() < 0.5) showTyping(); else hideTyping();
+    later(ghostLoop, rand(1200, 5500) / SCALE);
   }
 
   // Bot is back: the bubble keeps going for a moment, then a message arrives.
   function beginComeback() {
+    cancelPending();           // stop the ghost loop
     comebackPending = true;
     showTyping();
     later(() => {
@@ -175,11 +212,14 @@
   // The arrow is dimmed until there is something to send
   function updateSendBtn() {
     sendBtn.disabled = input.disabled || input.value.trim() === '';
+    const eb = document.querySelector('.emoji-composer');
+    if (eb) eb.disabled = input.disabled;
   }
 
   function send() {
     const text = input.value.trim();
     if (!text || phase === 'idle' || phase === 'ended') return;
+    if (phase === 'ready') startSession();   // first message starts the 5 minutes
 
     input.value = '';
     input.style.height = 'auto';
@@ -500,7 +540,8 @@
 
   replyBack.addEventListener('click', closeReply);
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && replyingTo) closeReply();
+    if (e.key === 'Escape' && !helpView.classList.contains('hidden')) closeHelp();
+    else if (e.key === 'Escape' && replyingTo) closeReply();
   });
   replyText.addEventListener('input', () => {
     replyPost.disabled = replyText.value.trim().length === 0;
@@ -520,4 +561,136 @@
   });
 
   renderComments();
+
+  /* ==========================================================
+     Help (?) popup
+     ========================================================== */
+  function openHelp() { helpView.classList.remove('hidden'); helpBack.focus(); }
+  function closeHelp() { helpView.classList.add('hidden'); }
+  helpBtn.addEventListener('click', openHelp);
+  helpBack.addEventListener('click', closeHelp);
+
+  /* ==========================================================
+     Real-time date & time  (dd/mm/yyyy, 24-hour)
+     ========================================================== */
+  const two = (n) => String(n).padStart(2, '0');
+  function updateClock() {
+    const d = new Date();
+    clockDate.textContent = two(d.getDate()) + '/' + two(d.getMonth() + 1) + '/' + d.getFullYear();
+    clockTime.textContent = two(d.getHours()) + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds());
+  }
+  updateClock();
+  setInterval(updateClock, 500);
+
+  /* ==========================================================
+     Show / hide the "?" icon, clock and Back-to-Top
+     Hidden when: any popup is open, replying to a comment,
+     or the participant is in the chat with the bot.
+     ========================================================== */
+  const popups = [rulesModal, endModal, commentModal, replyView, helpView];
+  function syncChrome() {
+    const popupOpen = popups.some((p) => !p.classList.contains('hidden'));
+    const inChat = !viewConversation.classList.contains('hidden') && !chat.classList.contains('hidden');
+    body.classList.toggle('chrome-hidden', popupOpen || inChat);
+
+    const inForum = !viewForum.classList.contains('hidden');
+    backTop.classList.toggle('show', inForum && !popupOpen && window.scrollY > 240);
+  }
+  const mo = new MutationObserver(syncChrome);
+  [...popups, chat, viewConversation, viewForum].forEach((el) =>
+    mo.observe(el, { attributes: true, attributeFilter: ['class'] }));
+  window.addEventListener('scroll', syncChrome, { passive: true });
+  syncChrome();
+
+  /* ==========================================================
+     Back to Top: slow, eased scroll
+     ========================================================== */
+  let scrollAnim = null;
+  function stopScrollAnim() { if (scrollAnim) { cancelAnimationFrame(scrollAnim); scrollAnim = null; } }
+  ['wheel', 'touchstart', 'keydown'].forEach((ev) =>
+    window.addEventListener(ev, stopScrollAnim, { passive: true }));
+
+  backTop.addEventListener('click', () => {
+    stopScrollAnim();
+    const from = window.scrollY;
+    if (from <= 0) return;
+    const dur = Math.min(2800, Math.max(1200, from * 1.2)); // never abrupt
+    const t0 = performance.now();
+    const ease = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / dur);
+      window.scrollTo(0, from * (1 - ease(p)));
+      scrollAnim = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    scrollAnim = requestAnimationFrame(step);
+  });
+
+  /* ==========================================================
+     Emoji picker (chat, forum comment, replies)
+     ========================================================== */
+  const EMOJIS = ('😀 😃 😄 😁 😆 😅 😂 🤣 🙂 😉 😊 😇 🥰 😍 🤩 😘 😋 😛 😜 🤪 🤗 🤭 🤔 🫠 ' +
+    '😐 😑 😶 🙄 😏 😬 😴 😌 😔 😪 🥱 😕 🙁 😟 😢 😭 😤 😠 😡 😳 🥺 😱 😨 😰 ' +
+    '😥 😓 🤯 🥲 😮‍💨 😵‍💫 🤐 🫣 👍 👎 👌 ✌️ 🤞 🙏 👏 🙌 💪 👋 🤝 ✨ 🔥 💯 ❤️ 🧡 ' +
+    '💛 💚 💙 💜 🖤 🤍 💔 ❤️‍🩹 🌙 ☀️ ⭐ 🌈 ☕ 🍀 🎧 💬').split(' ');
+
+  const picker = document.createElement('div');
+  picker.className = 'emoji-picker';
+  picker.hidden = true;
+  EMOJIS.forEach((em) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = em; b.setAttribute('aria-label', em);
+    picker.appendChild(b);
+  });
+  document.body.appendChild(picker);
+
+  let pickerTarget = null;   // the textarea that receives the emoji
+  let pickerAnchor = null;   // the button that opened the picker
+
+  function closePicker() { picker.hidden = true; pickerTarget = pickerAnchor = null; }
+  function openPicker(btn, ta) {
+    pickerTarget = ta; pickerAnchor = btn;
+    picker.hidden = false;
+    const r = btn.getBoundingClientRect();
+    const h = picker.offsetHeight, w = picker.offsetWidth;
+    let top = r.top - h - 8;
+    if (top < 8) top = Math.min(r.bottom + 8, window.innerHeight - h - 8);
+    let left = Math.min(r.right - w, window.innerWidth - w - 8);
+    left = Math.max(8, left);
+    picker.style.top = top + 'px';
+    picker.style.left = left + 'px';
+  }
+
+  document.querySelectorAll('[data-emoji-for]').forEach((btn) => {
+    const ta = $(btn.dataset.emojiFor);
+    btn.addEventListener('mousedown', (e) => e.preventDefault()); // keep text cursor
+    btn.addEventListener('click', () => {
+      if (!picker.hidden && pickerAnchor === btn) return closePicker();
+      openPicker(btn, ta);
+    });
+  });
+
+  picker.addEventListener('mousedown', (e) => e.preventDefault());
+  picker.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || !pickerTarget) return;
+    const ta = pickerTarget, em = b.textContent;
+    if (ta.maxLength > 0 && ta.value.length + em.length > ta.maxLength) return;
+    const s0 = ta.selectionStart ?? ta.value.length, e0 = ta.selectionEnd ?? s0;
+    ta.value = ta.value.slice(0, s0) + em + ta.value.slice(e0);
+    ta.selectionStart = ta.selectionEnd = s0 + em.length;
+    ta.dispatchEvent(new Event('input', { bubbles: true })); // enables Send/Post, auto-resize
+    ta.focus();
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (picker.hidden) return;
+    if (!picker.contains(e.target) && !(pickerAnchor && pickerAnchor.contains(e.target))) closePicker();
+  });
+  // capture phase: Esc closes only the picker, not the popup underneath
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !picker.hidden) { e.stopPropagation(); closePicker(); }
+  }, true);
+  // close when a popup/view changes underneath
+  [...popups, chat, viewForum].forEach((el) =>
+    new MutationObserver(closePicker).observe(el, { attributes: true, attributeFilter: ['class'] }));
 })();

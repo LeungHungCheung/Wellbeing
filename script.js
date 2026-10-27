@@ -60,6 +60,7 @@
   const backTop = $('backTop');
   const clockDate = $('clockDate');
   const clockTime = $('clockTime');
+  const skipBtn = $('skipBtn');
 
   /* ---------------- State ---------------- */
   let startTime = 0;
@@ -102,6 +103,18 @@
     phase = 'ready';           // waiting for the first message; clock not started yet
     startOnlineCounter();
     input.focus();
+  });
+
+  // Skip: for returning visitors who just want to read the Forum
+  skipBtn.addEventListener('click', () => {
+    stopOnlineCounter();
+    phase = 'ended';
+    input.disabled = true;
+    input.placeholder = 'This conversation was skipped.';
+    updateSendBtn();
+    skipBtn.classList.add('hidden');
+    tabForum.disabled = false;
+    switchTab('forum');          // no mandatory comment when skipping
   });
 
   // Called when the participant sends their first message
@@ -159,8 +172,9 @@
   // as if the other person keeps starting to type and then stops.
   function ghostLoop() {
     if (phase !== 'ghost') return;
-    if (Math.random() < 0.5) showTyping(); else hideTyping();
-    later(ghostLoop, rand(1200, 5500) / SCALE);
+    // one random draw every 2 seconds; the bubble is only shown ~1 time in 3
+    if (Math.random() < 0.33) showTyping(); else hideTyping();
+    later(ghostLoop, 2000 / SCALE);
   }
 
   // Bot is back: the bubble keeps going for a moment, then a message arrives.
@@ -172,7 +186,8 @@
       hideTyping();
       comebackPending = false;
       addBot(ghostMessages > 0
-        ? "sorry, I got pulled away for a bit... did you say something?"
+        ? pick(["sorry, I got pulled away for a bit... did you say something?",
+                "ah, sorry. my attention drifted off for a sec. I'm here. did I miss anything?"])
         : "hey, sorry. I'm back. where were we?");
     }, 2500 / SCALE);
   }
@@ -310,24 +325,35 @@
   function queueReply(userText) {
     cancelPending();           // several quick messages -> one reply to the last
     hideTyping();
-    const reply = getBotReply(userText);
+    // "||" splits a reply into several bubbles, like a person sending two messages
+    const parts = String(getBotReply(userText)).split('||').map((p) => p.trim()).filter(Boolean);
 
-    const readDelay = rand(800, 1600) / SCALE;              // "reading"
-    const typeDelay = Math.min(1200 + reply.length * 45, 4200) / SCALE; // "typing"
+    // sometimes a person takes a bit longer to even look at the message
+    const readDelay = (rand(800, 1600) + (Math.random() < 0.15 ? rand(1200, 2500) : 0)) / SCALE;
 
-    later(() => {
+    const sendPart = (i) => {
       showTyping();
-      later(() => { hideTyping(); addBot(reply); }, typeDelay);
-    }, readDelay);
+      const typeDelay = Math.min(1200 + parts[i].length * 45, 4200) / SCALE;
+      later(() => {
+        hideTyping();
+        addBot(parts[i]);
+        if (i + 1 < parts.length) later(() => sendPart(i + 1), rand(500, 1100) / SCALE);
+      }, typeDelay);
+    };
+    later(() => sendPart(0), readDelay);
   }
 
   /* ==========================================================
-     Chatbot brain (scripted, easy to swap)
+     Chatbot brain (scripted, but context-aware)
      ----------------------------------------------------------
-     getBotReply(text) -> string
-     To connect a real AI later, replace the body of this function
-     (it can return a Promise if you also `await` it in queueReply).
+     getBotReply(text) -> string. "||" inside a reply splits it
+     into two chat bubbles, like a person sending two messages.
+     It remembers: the participant's name, what it just asked
+     (so "good" / "yes" / "no" are understood), and avoids
+     repeating lines. To connect a real AI later, replace
+     getBotReply (it can return a Promise if queueReply awaits it).
      ========================================================== */
+  const mem = { name: null, turns: 0, expect: null };
   const used = new Set();
   function pick(list) {
     const fresh = list.filter((x) => !used.has(x));
@@ -336,59 +362,272 @@
     used.add(choice);
     return choice;
   }
+  const maybe = (p) => Math.random() < p;
+  // pick a line and remember what the bot just asked (so the next answer makes sense)
+  function say(list, expect) { mem.expect = expect || null; return pick(list); }
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
+  // "I'm tired of my job" -> "you're tired of your job"
+  function swapPerson(s) {
+    return s
+      .replace(/\bI'm\b/gi, "you're").replace(/\bI am\b/gi, 'you are')
+      .replace(/\bI've\b/gi, "you've").replace(/\bI'll\b/gi, "you'll").replace(/\bI'd\b/gi, "you'd")
+      .replace(/\bI\b/g, 'you').replace(/\bmy\b/gi, 'your').replace(/\bme\b/gi, 'you')
+      .replace(/\bmine\b/gi, 'yours').replace(/\bmyself\b/gi, 'yourself');
+  }
+
+  const STOP = new Set(('about after again also always been being because before could didnt does doing dont each even every ' +
+    'from have having here just kind like maybe more most much really should since some something still than that them then ' +
+    'there these they thing think this those though today very want were what when where which while will with would your ' +
+    'yours know feel feeling going went into over only other people been make made well').split(' '));
+  function keyword(t) {
+    const w = t.replace(/[^a-z\s']/g, ' ').split(/\s+/).filter((x) => x.length >= 4 && !STOP.has(x));
+    return w.sort((a, b) => b.length - a.length)[0] || null;
+  }
+
+  function moodOf(t) {
+    if (/\bnot (that |too |so |very |really )?(good|great|fine|well|okay|ok|happy)\b/.test(t)) return 'neg';
+    if (/\bnot (that |too |so |very )?bad\b/.test(t)) return 'pos';
+    if (/\b(bad|terrible|awful|tired|exhausted|stress\w*|sad|worst|rough|horrible|depressed|down|lonely|anxious|upset|sick|drained|boring|bored|annoying)\b/.test(t)) return 'neg';
+    if (/^(ok|okay|so so|so-so|meh|alright|average|nothing much|same old)\W*$/.test(t)) return 'neutral';
+    if (/\b(good|great|fine|nice|happy|awesome|amazing|well|excellent|wonderful|fun|chill|relaxed|better|cool|productive)\b/.test(t)) return 'pos';
+    return null;
+  }
+
+  /* Topic + emotion rules: [pattern, replies, what the bot is now waiting for] */
   const RULES = [
-    [/(are you|r u|you a).*(bot|ai|human|real|robot|person|machine)|who are you|what are you/i,
-      ["does it matter? \u{1F642} I'm just here to chat. what's on your mind?",
-       "haha why do you ask? I'm just someone to talk to right now"]],
-    [/your name|what.?s your name|call you/i,
-      ["I'd rather not say, kinda like it better this way. what should I call you?"]],
-    [/\b(hi|hello|hey|yo|sup)\b/i,
-      ["hey \u{1F642} how's it going?"]],
-    [/\b(thank you|thanks|thx)\b/i,
-      ["no worries \u{1F642}"]],
-    [/\b(tired|exhausted|sleepy|drained)\b/i,
-      ["same, honestly. long day?", "ugh, I feel that. did you get any rest at all?"]],
-    [/\b(sad|bad|stress|stressed|anxious|angry|awful|terrible|hate|upset|worst)\b/i,
-      ["that sounds rough. do you want to talk about it?", "I'm sorry, that doesn't sound easy. what happened?"]],
-    [/\b(happy|great|good|amazing|love|fun|nice|awesome|fine)\b/i,
-      ["that's nice to hear. what made it good?", "love that for you \u{1F642} anything in particular?"]],
-    [/\b(lol|haha|hehe|lmao)\b/i,
-      ["haha \u{1F604}", "\u{1F604} okay that made me smile"]],
-    [/\bwhy\b/i,
-      ["hmm, good question. I'm not sure I have a clear answer. what do you think?"]],
+    // --- the theme of the piece: waiting, silence, being ignored ---
+    [/\b(left on read|read receipt|ghost\w*|ignor\w*|no reply|not replying|didn'?t reply|doesn'?t reply|text(ed)? back|waiting for (a |their |his |her )?(reply|text|message|call)|seen (my|the) message)\b/,
+      ["waiting for a reply can get so loud. do you find yourself checking your phone again and again?",
+       "being left on read stings more than people admit. did it happen to you recently?",
+       "silence is weirdly hard to read, right? you start inventing reasons. || what's the reason you usually land on?"]],
+    // --- feelings ---
+    [/\b(lonely|alone|no one (cares|gets|listens)|nobody (cares|gets|listens)|isolated)\b/,
+      ["lonely is a heavy one. I'm glad you're talking to someone, even a stranger on a screen.",
+       "that sounds really isolating. is it a recent feeling, or has it been with you a while?"]],
+    [/\b(anxious|anxiety|nervous|worried|worry|scared|afraid|panic\w*|overthink\w*)\b/,
+      ["that sounds exhausting. is your brain running in circles, or is it one specific thing?",
+       "ugh, worrying is the worst because it never lets you rest. what's it mostly about?"]],
+    [/\b(stress\w*|overwhelm\w*|pressure|deadline|too much|burn(ed|t)? out|burnout)\b/,
+      ["that's a lot to carry. what's the heaviest part right now?",
+       "it sounds like you've been holding everything together for a while. || when did you last get a proper break?"]],
+    [/\b(tired|exhausted|sleepy|drained|insomnia|can'?t sleep|no sleep|up all night|stayed up)\b/,
+      ["same, honestly. I stayed up way too late last night. did you sleep okay?",
+       "ugh, I feel that. what's been keeping you up?"]],
+    [/\b(sad|depressed|cry|crying|cried|heartbroken|hurts?|hurting|miss (him|her|them|you|someone)|empty|numb)\b/,
+      ["I'm sorry. that sounds heavy. do you want to talk about it?",
+       "that really sucks. || do you want to tell me what happened?"], 'talk'],
+    [/\b(angry|mad|annoyed|furious|pissed|irritated|hate)\b/,
+      ["that sounds frustrating. what set it off?", "ugh, I'd be annoyed too. what happened?"]],
+    [/\b(bored|boring|nothing to do)\b/,
+      ["haha same, kind of. maybe that's why I'm here. what do you usually do when you're bored?"]],
+    [/\b(confused|lost|stuck|don'?t know what to do)\b/,
+      ["that in-between feeling is uncomfortable. what's the thing you're trying to figure out?",
+       "feeling stuck is hard. is it a decision, or more of a general fog?"]],
+    [/(?<!not )(?<!n't )\b(happy|excited|proud|thrilled|amazing day|great day|so good|good news)\b/,
+      ["that's really nice to hear. what's the best part?", "love that for you 🙂 what happened?"]],
+    // --- everyday topics ---
+    [/\b(work|job|boss|office|shift|meeting|class|school|exam|test|homework|assignment|thesis|professor|study(ing)?|college|university|intern\w*|coworker|colleague)\b/,
+      ["work and school stuff can eat the whole day. is it going okay, or is it one of those weeks?",
+       "ah. how are you holding up with it?",
+       "what part of it takes the most out of you?"]],
+    [/\b(eat|ate|food|dinner|lunch|breakfast|hungry|pizza|ramen|noodles|rice|cook\w*|snack|boba|bubble tea|coffee|tea|dessert)\b/,
+      ["okay now I'm hungry. what's the best thing you've eaten this week?",
+       "good food fixes a lot, honestly. what's your comfort food?",
+       "I'm a tea person. rainy day, warm cup, that's my whole personality. what about you?"]],
+    [/\b(music|song|playlist|album|band|singer|concert|listening to|spotify)\b/,
+      ["what have you been listening to lately? I'm always looking for something new.",
+       "music says things we can't. is there a song you keep coming back to?"]],
+    [/\b(movie|film|show|series|netflix|anime|drama|book|novel|reading|game|gaming|playing)\b/,
+      ["ooh, what's it about? I need a new recommendation.",
+       "do you like losing yourself in stories? I do, it's like a small escape."]],
+    [/\b(rain|raining|weather|cold|snow|sunny|storm|typhoon)\b/,
+      ["I kind of love rainy days. everything gets quieter. what's it like where you are?",
+       "weather really changes the mood, doesn't it? do you feel it too?"]],
+    [/\b(mom|mother|dad|father|parents|family|sister|brother|roommate)\b/,
+      ["family can be the best and the hardest part of life. how are things with them lately?",
+       "do you feel close to them, or is it complicated?"]],
+    [/\b(crush|girlfriend|boyfriend|dating|my ex|relationship|breakup|broke up|situationship|texting someone)\b/,
+      ["relationships are complicated. is it going well, or is it messy?",
+       "do you feel like you can really be yourself with them?"]],
+    [/\b(friend|friends|bestie|best friend)\b/,
+      ["friends make a huge difference. are you close with them, or drifting a bit?",
+       "tell me about them. what are they like?"]],
+    [/\b(phone|instagram|tiktok|social media|scroll\w*|notifications?)\b/,
+      ["it's so easy to lose an hour scrolling. do you feel better or worse afterwards?",
+       "I think phones make waiting feel louder. do you check yours a lot?"]],
+    [/\b(dog|cat|puppy|kitten|pet|hamster)\b/,
+      ["aw, tell me about them. what's their name?", "pets are the best. what are they like?"]],
+    [/\b(weekend|tomorrow|tonight|plans?|trip|travel|vacation|holiday)\b/,
+      ["nice. do you have something planned, or are you taking it as it comes?",
+       "I could use a little trip myself. where would you go if you could go anywhere?"]],
+    [/\b(life|meaning|purpose|future|dream|regret|goal)\b/,
+      ["that's a big one. do you think about it often, or did something bring it up?",
+       "I don't think I have it figured out either. what feels important to you right now?"]],
   ];
 
   const QUESTION = [
     "hmm, hard to say. what makes you ask?",
     "honestly I'm not sure. what do you think?",
-    "ha, good question. I'd say it depends",
+    "ha, good question. I'd say it depends. what's your gut telling you?",
+    "I think I'd need to think about that one. what made you wonder?",
   ];
-  const SHORT = ["mm. go on?", "tell me more", "yeah?", "and?"];
+  const SHORT = ["mm. go on?", "tell me more", "yeah?", "and then?", "I'm listening"];
   const GENERIC = [
     "I see. tell me more?",
     "that's interesting, how did that feel?",
     "yeah, I get that sometimes",
     "huh. what happened after that?",
-    "do you ever think about that kind of thing?",
+    "I think I'd feel the same way. I tend to overthink things like that.",
     "mm, I know what you mean",
-    "and then what?",
-    "that's kind of how it goes sometimes, right?",
+    "and how did you deal with it?",
+    "that makes sense. is that something you've felt before?",
+    "it sounds like it matters to you. why do you think that is?",
   ];
 
-  function getBotReply(text) {
-    // first answer to "How is your day !"
-    if (userMessageCount <= 1) {
-      if (/\b(bad|tired|awful|terrible|stress|stressed|boring|sad|exhausted|worst|meh)\b/i.test(text))
-        return "ah, sorry to hear that. want to tell me what happened?";
-      return "oh nice, glad to hear it. mine's been kind of slow honestly. what did you get up to today?";
+  function zhReply(t) {
+    if (/你好|哈囉|嗨|哈嘍/.test(t)) return say(["嗨 🙂 今天過得怎麼樣？"], 'mood');
+    if (/你呢|你好嗎|最近好嗎/.test(t)) return say(["還不錯啦，有點睏。你呢？"], 'mood');
+    if (/機器人|真人|你是誰|是ai|是 ai/.test(t)) return say(["哈哈，為什麼這麼問？我就是在這裡陪你聊聊。你在想什麼？"]);
+    if (/累|煩|難過|壓力|焦慮|不開心|心情不好|崩潰/.test(t))
+      return say(["聽起來真的不輕鬆。想聊聊發生了什麼事嗎？", "辛苦了。是今天才發生的，還是累積很久了？"], 'talk');
+    if (/開心|不錯|很好|好玩|棒|高興/.test(t)) return say(["聽到這個真好 🙂 發生了什麼好事？"]);
+    return say(["嗯，我懂。可以再多說一點嗎？", "然後呢？", "這聽起來蠻有意思的，你當時是什麼感覺？", "原來如此。你後來怎麼做的？"]);
+  }
+
+  function brain(text, t, words, prevExpect) {
+    if (/[\u4e00-\u9fff]/.test(text)) return zhReply(t);
+
+    // 1. answers to what the bot just asked
+    if (prevExpect === 'mood' && words <= 7) {
+      const m = moodOf(t);
+      if (m === 'pos') return say(["good to hear. what made it a good one?", "nice 🙂 || anything in particular, or just a calm kind of day?"]);
+      if (m === 'neg') return say(["ah, sorry to hear that. want to tell me what happened?", "that sounds like a rough one. || do you want to talk about it?"], 'talk');
+      if (m === 'neutral') return say(["just okay? those are the hardest to explain, haha. anything on your mind?", "okay is okay. what did you get up to today?"]);
     }
-    for (const [re, replies] of RULES) {
-      if (re.test(text)) return pick(replies);
+    if (prevExpect === 'talk' && words <= 5) {
+      if (/\b(yes|yeah|yep|yup|sure|ok|okay|i guess|please)\b/.test(t))
+        return say(["okay. I'm listening, take your time.", "alright, go ahead. no rush."]);
+      if (/\b(no|nope|not really|nah|later)\b/.test(t))
+        return say(["that's okay, no pressure. we can talk about something lighter. what did you eat today?",
+                    "totally fine. we can just chat. what's something small that made you smile lately?"]);
     }
-    if (/\?\s*$/.test(text)) return pick(QUESTION);
-    if (text.split(/\s+/).length <= 3) return pick(SHORT);
-    return pick(GENERIC);
+
+    // 2. the participant introduces themselves
+    const nm = text.match(/\b(?:my name is|my name's|call me|name's)\s+([A-Za-z][A-Za-z'-]{1,19})/i);
+    if (nm) {
+      mem.name = cap(nm[1]);
+      return say(["nice to meet you, " + mem.name + " 🙂 || I'm keeping my own name a secret though. it makes this feel more like talking to a stranger. how's your day going?"], 'mood');
+    }
+
+    // 3. small talk back and forth
+    if (/\b(how are you|how r u|how are u|how'?s it going|how have you been|how do you feel|wbu|hbu|how about you|what about you)\b|\b(and you|and u)\W*$/.test(t))
+      return say(["I'm doing alright, a little sleepy honestly. stayed up too late. you?",
+                  "pretty good, quiet day. || and you? how's it going?",
+                  "can't complain. I've been watching the rain most of the day. how about you?"], 'mood');
+    if (words <= 4 && /\b(what'?s up|sup|wassup)\b/.test(t))
+      return say(["not much, just here. you?", "just taking it slow today. what about you?"], 'mood');
+    if (words <= 5 && /^(hi+|hello+|hey+|heya|hiya|yo|howdy|good (morning|afternoon|evening|night))\b/.test(t))
+      return mem.turns <= 1
+        ? say(["hey 🙂 how's your day going?", "hi! || how's your day been so far?"], 'mood')
+        : say(["hey again 🙂", "hi 🙂 still here"]);
+
+    // 4. questions about the bot
+    if (/(are you|r u|you a).*(bot|ai|human|real|robot|person|machine|computer)|who are you|what are you\b(?! doing| up)/.test(t))
+      return say(["haha does it matter? I'm here, you're here. what's on your mind?",
+                  "why do you ask? 🙂 || does it feel different if I'm one thing or the other?",
+                  "you sound curious. I'm just someone on the other side of the screen. what made you wonder?"]);
+    if (/your name|what.?s your name|who.*you called/.test(t))
+      return say(["I'd rather not say. it's kind of nice staying strangers. what should I call you?",
+                  "no names here, I think that's the point. is there one you like to go by?"]);
+    if (/how old|your age/.test(t)) return say(["old enough to stay up too late, haha. you?", "let's say I've lived long enough to overthink things. how about you?"]);
+    if (/where (are you|do you live)|where.*(you|u) from/.test(t))
+      return say(["somewhere with a lot of rain, let's say. I like keeping a little mystery. where are you?", "a place that's quiet at night. what about you?"]);
+    if (/what (are you|r u) (doing|up to)|what you doing/.test(t))
+      return say(["not much, just here chatting with you. you?", "just listening to some quiet music and talking to you 🙂 what about you?"]);
+    if (/what do you do|your job|do you work/.test(t)) return say(["a bit of this and that, nothing very exciting. what about you?"]);
+    if (/favou?rite/.test(t) && /\?|your/.test(t)) return say(["ooh, hard one. I change my mind a lot. what's yours?"]);
+    if (/\b(are you|you) (still )?(there|here)\b|^hello\?+$/.test(t)) return say(["yeah, I'm here 🙂"]);
+    if (/where (did|have) you (go|gone|been)|why (did|do|are) you (stop|leave|ignore|ghost)|why (didn'?t|aren'?t|don'?t) you (reply|answer|respond|text)|you (ignored|ghosted)|are you ignoring/.test(t))
+      return say(["sorry, I really did get pulled away. it wasn't about you. did it bother you?",
+                  "ah, I'm sorry. I disappeared on you, didn't I? || how long did it feel like?"]);
+    if (/\b(no worries|it'?s (ok|okay|fine|alright)|all good|don'?t worry|that'?s ok)\b/.test(t))
+      return say(["thanks for being cool about it. I hate leaving people hanging.", "appreciate that 🙂 so, where were we?"]);
+    if (/what do you think|your opinion|do you agree|your take/.test(t))
+      return say(["honestly? I think it depends on the day. but I lean toward trusting your gut. what's yours telling you?"]);
+    if (/do you (like|love|enjoy|hate|watch|play|listen|eat|have|know|ever|believe|think)/.test(t))
+      return say(["I think so, yeah. not sure I can explain why though. what about you?",
+                  "kind of, yeah. it grows on me. do you?",
+                  "hmm, good question. || I think I do. what made you ask?"]);
+
+    // 5. polite / social phrases
+    if (/\b(thank you|thanks|thx)\b/.test(t)) return say(["anytime 🙂", "no worries 🙂"]);
+    if (/\b(bye|goodbye|gotta go|see you|good night)\b/.test(t)) return say(["oh, leaving already? take care of yourself 🙂", "okay. it was nice talking to you."]);
+    if (/\b(sorry|my bad|apolog\w+)\b/.test(t)) return say(["no need to apologize, really 🙂", "it's okay. you're fine."]);
+    if (/\b(you'?re|you are|ur) (so |really |very )?(nice|sweet|kind|funny|cool|great|smart|interesting|easy to talk to)\b/.test(t))
+      return say(["aw, thank you 🙂 that's kind. you're easy to talk to too.", "that made my day a little brighter, honestly."]);
+    if (/\b(you'?re|you are|ur) (so |really |very )?(weird|boring|stupid|dumb|annoying|rude|creepy)\b|\bshut up\b/.test(t))
+      return say(["ouch. did I say something wrong?", "okay, fair. I'll try to be better company. what would you rather talk about?"]);
+
+    // 6. one-word / very short reactions
+    if (/^(lol|lmao|haha+|hehe+|hah+)\W*$/.test(t)) return say(["haha 🙂", "okay that made me smile", "😄"]);
+    if (/^(idk|i don'?t know|dunno|maybe)\W*$/.test(t)) return say(["that's okay, you don't have to know. we can just talk.", "fair. some things don't have clear answers."]);
+    if (/^(nothing|nm|nothing much|not much)\W*$/.test(t)) return say(["nothing much is a perfectly good answer. some days are like that.", "ha, same. quiet kind of day?"]);
+    if (/^(same|true|right|exactly|fr|facts)\W*$/.test(t)) return say(["right? 🙂 it's nice when someone gets it.", "yeah. it's one of those things."]);
+    if (/^(no|nope|nah)\W*$/.test(t)) return say(["no? what makes you say that?", "fair enough."]);
+    if (/^(yes|yeah|yep|yup|sure|ok|okay|k)\W*$/.test(t)) return say(["mm. you seem a bit quiet, everything okay?", "okay 🙂 what's on your mind?", "yeah? tell me more."]);
+    if (/^(hmm+|mm+|uh+|um+|oh|ah|wow|\.{2,})\W*$/.test(t)) return say(["you went quiet for a second. thinking about something?", "mm. what are you thinking?"]);
+
+    // 7. feelings and topics
+    for (const [re, list, ex] of RULES) {
+      if (re.test(t)) return say(list, ex);
+    }
+
+    // 8. reflect what the participant said back to them
+    const past = text.match(/^i(?:'ve| have)?\s+(?:just\s+)?(went|had|got|saw|watched|ate|played|read|started|finished|talked|met|bought|made|tried|lost|found|quit|failed|passed|moved|visited|cooked|slept|woke|missed)\b(.*)$/i);
+    if (past && past[2].split(/\s+/).length <= 12)
+      return say(["oh, you " + past[1].toLowerCase() + swapPerson(past[2]).replace(/[.!]+$/, '') + "? how was that?",
+                  "you " + past[1].toLowerCase() + swapPerson(past[2]).replace(/[.!]+$/, '') + ". || how did that feel?"]);
+    const opin = text.match(/^i\s+(think|feel|believe|guess|wish|hope)\s+(.+)$/i);
+    if (opin && opin[2].split(/\s+/).length <= 14) {
+      const v = opin[1].toLowerCase(), rest = swapPerson(opin[2]).replace(/[.!]+$/, '');
+      if (v === 'feel') return say(["so you feel " + rest + ". how long have you felt that way?"]);
+      if (v === 'wish' || v === 'hope') return say(["you " + v + " " + rest + ". what would that look like for you?"]);
+      return say(["so you " + v + " " + rest + ". what makes you " + v + " that?"]);
+    }
+
+    // 9. long messages deserve acknowledgement
+    if (words >= 25)
+      return say(["thanks for telling me all that. it sounds like there's a lot going on. which part is weighing on you most?",
+                  "I read every word. that's a lot to hold. what feels most important right now?",
+                  "wow, okay. || I'm glad you said it out loud. do you need a listener right now, or an idea?"]);
+
+    // 10. open questions
+    if (/\?\s*$/.test(text)) {
+      if (/^(why|how come)\b/.test(t)) return say(["good question. I don't have a clean answer. what does your gut say?", "I've wondered about that too. why do you think?"]);
+      return say(QUESTION);
+    }
+
+    // 11. fallbacks
+    if (words <= 3) return say(SHORT);
+    const k = keyword(t);
+    if (k && maybe(0.45)) return say(["you mentioned " + k + ". what's the story there?", k + "... tell me more about that?"]);
+    return say(GENERIC);
+  }
+
+  function getBotReply(raw) {
+    const text = raw.trim();
+    const t = text.toLowerCase();
+    const words = t.split(/\s+/).filter(Boolean).length;
+    const prevExpect = mem.expect;
+    mem.expect = null;
+    mem.turns++;
+
+    let out = brain(text, t, words, prevExpect);
+    // now and then use their name, like a real person would
+    if (mem.name && maybe(0.2) && !out.includes(mem.name))
+      out = out.replace(/([.!?])(\s|\|\||$)/, ', ' + mem.name + '$1$2');
+    return out;
   }
 
   /* ==========================================================
@@ -415,6 +654,8 @@
       text: "When they came back I didn't know whether to be angry or relieved.", replies: [] },
   ];
 
+  const SEED_LIKES = { s1: 7, s2: 3, s3: 5, s4: 2 };
+
   function loadComments() {
     let data = null;
     try {
@@ -422,10 +663,15 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) data = JSON.parse(raw);
     } catch (e) { data = null; }
-    if (!Array.isArray(data)) data = JSON.parse(JSON.stringify(SEED));
+    if (!Array.isArray(data)) {
+      data = JSON.parse(JSON.stringify(SEED));
+      data.forEach((c) => { c.likes = SEED_LIKES[c.id] || 0; });   // hidden "popularity" for Top
+    }
     data.forEach((c, i) => {
       if (!c.id) c.id = 'c' + i + '-' + c.ts;
       if (!Array.isArray(c.replies)) c.replies = [];
+      if (typeof c.likes !== 'number') c.likes = 0;
+      c.liked = !!c.liked;
     });
     return data;
   }
@@ -463,9 +709,46 @@
     return meta;
   }
 
+  const HEART_SVG =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.3 4.6 12.9a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9a4.6 4.6 0 0 1 6.5 6.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+
+  /* ---- Filter: all / ascending / descending / top ---- */
+  let filterMode = 'all';
+  const filtersEl = $('filters');
+
+  const nameOf = (c) => c.name || 'Anonymous';
+  const byNameAsc = (a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base' }) || b.ts - a.ts;
+  const byNameDesc = (a, b) => nameOf(b).localeCompare(nameOf(a), undefined, { sensitivity: 'base' }) || b.ts - a.ts;
+  // Top: more replies first, then more likes, then newest. (Numbers are never shown.)
+  const byTop = (a, b) => b.replies.length - a.replies.length || (b.likes || 0) - (a.likes || 0) || b.ts - a.ts;
+
+  function sortedComments() {
+    const list = [...comments];
+    if (filterMode === 'asc') return list.sort(byNameAsc);
+    if (filterMode === 'desc') return list.sort(byNameDesc);
+    if (filterMode === 'top') return list.sort(byTop);
+    return list.sort((a, b) => b.ts - a.ts);       // all: newest first
+  }
+
+  function updateFilters() {
+    filtersEl.querySelectorAll('.filter-pill').forEach((b) => {
+      const on = b.dataset.filter === filterMode;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (b.dataset.filter === 'all') b.textContent = 'All ' + comments.length;
+    });
+  }
+  filtersEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.filter-pill');
+    if (!b) return;
+    filterMode = b.dataset.filter;
+    renderComments();
+  });
+
   function renderComments() {
+    updateFilters();
     commentList.innerHTML = '';
-    [...comments].sort((a, b) => b.ts - a.ts).forEach((c) => {
+    sortedComments().forEach((c) => {
       const li = document.createElement('li');
 
       const row = document.createElement('div');
@@ -474,14 +757,35 @@
       main.className = 'comment-main';
       main.append(textEl(c), metaEl(c));
 
+      const actions = document.createElement('div');
+      actions.className = 'comment-actions';
+
+      // like (no number shown)
+      const like = document.createElement('button');
+      like.type = 'button';
+      like.className = 'like-btn' + (c.liked ? ' liked' : '');
+      like.setAttribute('aria-label', 'Like this comment');
+      like.setAttribute('aria-pressed', c.liked ? 'true' : 'false');
+      like.innerHTML = HEART_SVG;
+      like.addEventListener('click', () => {
+        c.liked = !c.liked;
+        c.likes = Math.max(0, (c.likes || 0) + (c.liked ? 1 : -1));
+        like.classList.toggle('liked', c.liked);
+        like.setAttribute('aria-pressed', c.liked ? 'true' : 'false');
+        if (c.liked) { like.classList.remove('pop'); void like.offsetWidth; like.classList.add('pop'); }
+        saveComments();            // the list is not re-sorted until the next refresh, so nothing jumps
+      });
+
+      // reply (no number shown)
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'reply-btn';
       btn.setAttribute('aria-label', 'Reply to this comment');
-      btn.innerHTML = BUBBLE_SVG + (c.replies.length ? '<span class="reply-count">' + c.replies.length + '</span>' : '');
+      btn.innerHTML = BUBBLE_SVG;
       btn.addEventListener('click', () => openReply(c.id));
 
-      row.append(main, btn);
+      actions.append(like, btn);
+      row.append(main, actions);
       li.appendChild(row);
 
       if (c.replies.length) {
@@ -515,7 +819,7 @@
     const text = commentText.value.trim();
     if (!text) return;
     participantName = commentName.value.trim() || 'Anonymous';
-    comments.push({ id: uid(), name: participantName, ts: Date.now(), text: text, replies: [] });
+    comments.push({ id: uid(), name: participantName, ts: Date.now(), text: text, replies: [], likes: 0, liked: false });
     saveComments();
     renderComments();
     commentModal.classList.add('hidden');

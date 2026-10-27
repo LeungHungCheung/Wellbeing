@@ -28,7 +28,10 @@
 
       <!-- Landing: only a start button -->
       <div id="landing" class="landing">
-        <button id="startBtn" class="btn btn-light">Start conversation</button>
+        <div class="landing-inner">
+          <button id="startBtn" class="btn btn-light">Start conversation</button>
+          <p class="version">Waiting Dilemma 2.4.1</p>
+        </div>
       </div>
 
       <!-- Chat (hidden until the rules are accepted) -->
@@ -36,7 +39,7 @@
         <div class="status" id="status"><span class="status-dot"></span><span id="statusText">Online</span></div>
 
         <div class="welcome">
-          <h1>Anonymous Chat with Strangers</h1>
+          <h1>Anonymous Chat with Strangers ~</h1>
         </div>
 
         <div id="messages" class="messages" aria-live="polite"></div>
@@ -48,6 +51,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="#111" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </form>
+        <button type="button" id="skipBtn" class="skip-btn">Skip conversation</button>
       </div>
     </section>
 
@@ -56,7 +60,12 @@
       <div class="forum-wrap">
         <div class="forum-head">
           <h2>Forum</h2>
-          <h3>Share your feelings in here !</h3>
+        </div>
+        <div id="filters" class="filters" role="group" aria-label="Filter comments">
+          <button type="button" class="filter-pill active" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" class="filter-pill" data-filter="asc" aria-pressed="false">Ascending</button>
+          <button type="button" class="filter-pill" data-filter="desc" aria-pressed="false">Descending</button>
+          <button type="button" class="filter-pill" data-filter="top" aria-pressed="false">Top</button>
         </div>
         <ul id="commentList" class="comment-list"></ul>
       </div>
@@ -67,13 +76,13 @@
   <!-- 1. Rules -->
   <div id="rulesModal" class="overlay hidden">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
-      <h3 id="rulesTitle">Rules</h3>
+      <h3 id="rulesTitle">Rules (Please read carefully !)</h3>
       <ol class="rules">
-        <li>You can only use the computer in the installation area.</li>
-        <li>You must stay inside the red circle.</li>
-        <li>The installation section will last for 5 minutes.</li>
         <li>All your belongings should be put away.</li>
-        <li>Enjoy the chat with someone! You can say anything you want.</li>
+        <li>The experience will last for 5 minutes.</li>
+        <li>You must stay inside the red circle.</li>
+        <li>Use the computer to participate.</li>
+        <li>Enjoy meeting unknown people around the world.</li>
       </ol>
       <button id="rulesOk" class="btn btn-light">OK</button>
     </div>
@@ -126,7 +135,7 @@
         Back
       </button>
       <p class="help-text">Waiting Dilemma translates the hypervigilant loop of anxious attachment into a participatory spatial experience. In digital communication, interface cues&mdash;typing bubbles, read receipts, and abrupt silence&mdash;turn pauses into acute sites of psychological projection.</p>
-      <p class="help-tagline">Understanding yourself and others through experience !</p>
+      <p class="help-tagline">Created by Mack & Brian, 2026</p>
     </div>
   </div>
 

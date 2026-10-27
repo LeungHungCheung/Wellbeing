@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="theme-dark">
+  <canvas id="asciiBg" aria-hidden="true"></canvas>
 
   <!-- Top bar: only two tabs -->
   <header class="topbar">
@@ -39,7 +40,7 @@
         <div class="status" id="status"><span class="status-dot"></span><span id="statusText">Online</span></div>
 
         <div class="welcome">
-          <h1>Anonymous Chat with Strangers ~</h1>
+          <h1>Anonymous Chat with Strangers</h1>
         </div>
 
         <div id="messages" class="messages" aria-live="polite"></div>
@@ -62,7 +63,7 @@
           <h2>Forum</h2>
         </div>
         <div id="filters" class="filters" role="group" aria-label="Filter comments">
-          <button type="button" class="filter-pill active" data-filter="all" aria-pressed="true">All</button>
+          <button type="button" class="filter-pill active" data-filter="all" aria-pressed="true">All ()</button>
           <button type="button" class="filter-pill" data-filter="asc" aria-pressed="false">Ascending</button>
           <button type="button" class="filter-pill" data-filter="desc" aria-pressed="false">Descending</button>
           <button type="button" class="filter-pill" data-filter="top" aria-pressed="false">Top</button>
@@ -84,7 +85,7 @@
         <li>Use the computer to participate.</li>
         <li>Enjoy meeting unknown people around the world.</li>
       </ol>
-      <button id="rulesOk" class="btn btn-light">OK</button>
+      <button id="rulesOk" class="btn btn-light btn-center">OK</button>
     </div>
   </div>
 
@@ -135,7 +136,7 @@
         Back
       </button>
       <p class="help-text">Waiting Dilemma translates the hypervigilant loop of anxious attachment into a participatory spatial experience. In digital communication, interface cues&mdash;typing bubbles, read receipts, and abrupt silence&mdash;turn pauses into acute sites of psychological projection.</p>
-      <p class="help-tagline">Created by Mack & Brian, 2026</p>
+      <p class="help-tagline">Understanding yourself and others through experience !</p>
     </div>
   </div>
 

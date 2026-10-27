@@ -87,6 +87,7 @@
     tabForum.classList.toggle('active', forum);
     body.classList.toggle('theme-light', forum);
     body.classList.toggle('theme-dark', !forum);
+    if (!forum && phase === 'ready') input.focus();
   }
   tabConversation.addEventListener('click', () => switchTab('conversation'));
   tabForum.addEventListener('click', () => { if (!tabForum.disabled) switchTab('forum'); });
@@ -105,22 +106,20 @@
     input.focus();
   });
 
-  // Skip: for returning visitors who just want to read the Forum
+  // Skip: for returning visitors who just want to read the Forum.
+  // They can still come back to the Conversation tab and try it once
+  // (the chat stays ready, waiting for their first message).
   skipBtn.addEventListener('click', () => {
-    stopOnlineCounter();
-    phase = 'ended';
-    input.disabled = true;
-    input.placeholder = 'This conversation was skipped.';
-    updateSendBtn();
-    skipBtn.classList.add('hidden');
+    skipBtn.classList.add('hidden');   // already skipped, no need to offer it again
     tabForum.disabled = false;
-    switchTab('forum');          // no mandatory comment when skipping
+    switchTab('forum');                // no mandatory comment when skipping
   });
 
   // Called when the participant sends their first message
   function startSession() {
     stopOnlineCounter();
     statusText.textContent = 'Online';
+    tabForum.disabled = true;          // no peeking at the Forum mid-conversation
     startTime = Date.now();
     phase = 'talk1';
     tickTimer = setInterval(tick, 200);
@@ -735,7 +734,7 @@
       const on = b.dataset.filter === filterMode;
       b.classList.toggle('active', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      if (b.dataset.filter === 'all') b.textContent = 'All ' + comments.length;
+      if (b.dataset.filter === 'all') b.textContent = 'All (' + comments.length + ')';
     });
   }
   filtersEl.addEventListener('click', (e) => {
@@ -997,4 +996,171 @@
   // close when a popup/view changes underneath
   [...popups, chat, viewForum].forEach((el) =>
     new MutationObserver(closePicker).observe(el, { attributes: true, attributeFilter: ['class'] }));
+
+  /* ==========================================================
+     ASCII speech bubbles drifting in the background
+     Conversation tab, only while waiting for the first message.
+     Idea from stackedlol/ascii-sharks (creatures drawn as text
+     characters on a canvas) - here the "swimmers" are pixel
+     speech bubbles, shaped after the sample bubble.
+     ========================================================== */
+  const asciiCanvas = $('asciiBg');
+  const actx = asciiCanvas.getContext('2d');
+  const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace';
+
+  // three depth layers: far (small, faint, slow) -> near (big, brighter, faster)
+  const LAYERS = [
+    { size: 11, alpha: 0.12, speed: [14, 24] },
+    { size: 15, alpha: 0.18, speed: [24, 38] },
+    { size: 20, alpha: 0.22, speed: [36, 54] },
+  ];
+  const PHRASES = ['hello?', 'hi', 'are you there?', 'hey', 'seen', '?', 'anyone?', 'still there?', 'typing...', '...'];
+  const SHADE = ['#', '#', '#', '%', '@', '8'];      // border characters shimmer between these
+
+  let abW = 0, abH = 0, abDpr = 1;
+  let bubbles = [];
+  let abRunning = false, abRaf = 0, abLast = 0, abClock = 0;
+
+  // Build the character grid of one bubble (rounded corners, tail at the bottom like the sample)
+  function buildSprite(inner, tailRight) {
+    const W = inner + 6;
+    const row = () => new Array(W).fill(' ');
+    const top = row(); for (let x = 2; x < W - 2; x++) top[x] = '#';
+    const corner = row(); corner[1] = '#'; corner[W - 2] = '#';
+    const mid = row(); mid[0] = '#'; mid[W - 1] = '#';
+    const bottom = top.slice();
+    const t = 3;                                      // column of the tail's straight wall
+    for (let x = t + 1; x <= t + 2; x++) bottom[x] = ' ';   // opening into the tail
+    const tail = [[0, 3], [0, 1]].map(([a, b]) => {
+      const r = row(); r[t + a] = '#'; r[t + b] = '#'; return r;
+    });
+    const tip = row(); tip[t - 1] = '#';
+    const grid = [top, corner, mid, corner.slice(), bottom, ...tail, tip];
+    if (tailRight) grid.forEach((r) => r.reverse());  // mirrored: tail trails behind when moving left
+    return { grid: grid, W: W };
+  }
+
+  function makeBubble(initial) {
+    const layer = LAYERS[abLayerPick()];
+    const dots = Math.random() < 0.25;
+    const text = dots ? '' : PHRASES[Math.floor(Math.random() * PHRASES.length)];
+    const inner = dots ? 7 : Math.max(5, text.length);
+    const dir = Math.random() < 0.5 ? 1 : -1;       // 1 = swims right, -1 = swims left
+    const sprite = buildSprite(inner, dir < 0);
+    const ctxFont = layer.size + 'px ' + MONO;
+    actx.font = ctxFont;
+    const cw = actx.measureText('M').width, lh = layer.size * 1.05;
+    const w = sprite.W * cw, h = sprite.grid.length * lh;
+    const b = {
+      layer: layer, dots: dots, text: text, inner: inner, dir: dir, sprite: sprite,
+      font: ctxFont, cw: cw, lh: lh, w: w, h: h,
+      speed: rand(layer.speed[0], layer.speed[1]),
+      bobAmp: rand(8, 22), bobFreq: rand(0.5, 1.1), phase: rand(0, 6.28),
+      seed: Math.floor(rand(0, 1000)), cycleOffset: rand(0, 8),
+      x: 0, y: rand(abH * 0.08, Math.max(abH * 0.08 + 1, abH - h - 30)),
+    };
+    if (initial) b.x = rand(-w, abW);
+    else b.x = dir > 0 ? -w - rand(0, 240) : abW + rand(0, 240);
+    return b;
+  }
+  let abPickCount = 0;
+  function abLayerPick() {            // keep a nice spread of near / mid / far
+    const order = [0, 1, 2, 0, 1, 0, 2, 1];
+    return order[abPickCount++ % order.length];
+  }
+
+  function resetBubbles() {
+    abPickCount = 0;
+    const n = abW < 700 ? 4 : 7;
+    bubbles = [];
+    for (let i = 0; i < n; i++) bubbles.push(makeBubble(true));
+  }
+
+  function resizeAscii() {
+    abDpr = Math.min(window.devicePixelRatio || 1, 2);
+    abW = window.innerWidth; abH = window.innerHeight;
+    asciiCanvas.width = Math.round(abW * abDpr);
+    asciiCanvas.height = Math.round(abH * abDpr);
+    actx.setTransform(abDpr, 0, 0, abDpr, 0, 0);
+    actx.textBaseline = 'top';
+    resetBubbles();
+    if (!abRunning && asciiCanvas.classList.contains('on')) drawAscii();
+  }
+
+  // text shown on the bubble's middle row at a given time
+  function bubbleLine(b, t) {
+    if (b.dots) {                                   // iMessage-like typing dots: o . .  ->  . o .  ->  . . o
+      const a = Math.floor(t * 2.5) % 3;
+      const d = [0, 1, 2].map((i) => (i === a ? 'o' : '.'));
+      return ' ' + d[0] + ' ' + d[1] + ' ' + d[2] + ' ';
+    }
+    const len = b.text.length, tt = (t + b.cycleOffset) % (len * 0.16 + 2.6 + len * 0.05 + 0.9);
+    let n;
+    if (tt < len * 0.16) n = Math.floor(tt / 0.16);                       // typing
+    else if (tt < len * 0.16 + 2.6) n = len;                              // holding
+    else if (tt < len * 0.16 + 2.6 + len * 0.05) n = len - Math.floor((tt - len * 0.16 - 2.6) / 0.05); // erasing
+    else n = 0;
+    const cursor = n < len && Math.floor(t * 2) % 2 === 0 ? '_' : ' ';
+    return (b.text.slice(0, n) + cursor).padEnd(b.inner, ' ');
+  }
+
+  function drawAscii() {
+    actx.clearRect(0, 0, abW, abH);
+    const k = Math.floor(abClock * 1.4);            // slow shimmer step
+    bubbles.forEach((b) => {
+      actx.font = b.font;
+      const bob = Math.sin(abClock * b.bobFreq + b.phase) * b.bobAmp;
+      const line = bubbleLine(b, abClock);
+      const g = b.sprite.grid;
+      for (let r = 0; r < g.length; r++) {
+        for (let c = 0; c < b.sprite.W; c++) {
+          let ch = g[r][c];
+          if (ch === ' ') continue;
+          ch = SHADE[(r * 31 + c * 17 + b.seed + k * 7) % SHADE.length];
+          actx.fillStyle = 'rgba(236,236,236,' + b.layer.alpha + ')';
+          actx.fillText(ch, b.x + c * b.cw, b.y + bob + r * b.lh);
+        }
+      }
+      // the words inside (a little brighter than the outline)
+      actx.fillStyle = 'rgba(236,236,236,' + Math.min(0.55, b.layer.alpha + 0.16) + ')';
+      for (let i = 0; i < line.length; i++) {
+        if (line[i] !== ' ') actx.fillText(line[i], b.x + (3 + i) * b.cw, b.y + bob + 2 * b.lh);
+      }
+    });
+  }
+
+  function stepAscii(ts) {
+    if (!abRunning) return;
+    abRaf = requestAnimationFrame(stepAscii);
+    if (ts - abLast < 32) return;                   // ~30 fps is plenty for ASCII
+    const dt = Math.min(0.1, (ts - abLast) / 1000 || 0.03);
+    abLast = ts; abClock += dt;
+    bubbles.forEach((b, i) => {
+      b.x += b.dir * b.speed * dt;
+      if ((b.dir > 0 && b.x > abW + 30) || (b.dir < 0 && b.x < -b.w - 30)) bubbles[i] = makeBubble(false);
+    });
+    drawAscii();
+  }
+
+  let abStopTimer = null;
+  function syncAscii() {
+    const show = !viewConversation.classList.contains('hidden') &&
+                 !chat.classList.contains('hidden') &&
+                 chat.classList.contains('is-new');
+    clearTimeout(abStopTimer);
+    if (show) {
+      if (!bubbles.length) resizeAscii();
+      asciiCanvas.classList.add('on');
+      if (reduceMotion) { drawAscii(); return; }    // calm, static scene
+      if (!abRunning) { abRunning = true; abLast = performance.now(); abRaf = requestAnimationFrame(stepAscii); }
+    } else {
+      asciiCanvas.classList.remove('on');           // fades out, then stops drawing
+      abStopTimer = setTimeout(() => { abRunning = false; cancelAnimationFrame(abRaf); }, 900);
+    }
+  }
+  [chat, viewConversation].forEach((el) =>
+    new MutationObserver(syncAscii).observe(el, { attributes: true, attributeFilter: ['class'] }));
+  window.addEventListener('resize', () => { if (bubbles.length) resizeAscii(); });
+  syncAscii();
 })();

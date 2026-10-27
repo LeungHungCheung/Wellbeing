@@ -1179,6 +1179,8 @@
     enabled: !/[?&]noprint\b/.test(location.search),
     paperWidth: '58mm',          // your roll: '58mm' (Deli DL-5801P) or '80mm'; 'auto' for a normal A4 / Letter printer
     margin: '2mm',               // 58mm paper prints about 48mm wide, so keep margins small
+    shiftRight: '4mm',           // moves ALL the text to the right (the first letters were cut off).
+                                 // About 2mm per character: use '2mm' for 1 character, '6mm' for 3. '0mm' = no shift.
     fontSize: '10pt',            // 10pt fits ~22 characters per line on 58mm paper (use 12pt on 80mm)
     feed: '14mm',                // blank space after the text, so you can tear the slip off cleanly
     title: 'WAITING DILEMMA',
@@ -1188,7 +1190,8 @@
   const pageStyle = document.createElement('style');
   pageStyle.textContent = '@page { size: ' + (PRINT.paperWidth === 'auto' ? 'auto' : PRINT.paperWidth + ' auto') +
                           '; margin: ' + PRINT.margin + '; }' +
-                          '@media print { #printSheet { font-size: ' + PRINT.fontSize + '; padding-bottom: ' + PRINT.feed + '; } }';
+                          '@media print { #printSheet { font-size: ' + PRINT.fontSize + '; padding-bottom: ' + PRINT.feed +
+                          '; padding-left: ' + PRINT.shiftRight + '; } }';
   document.head.appendChild(pageStyle);
 
   function printReceipt(c) {

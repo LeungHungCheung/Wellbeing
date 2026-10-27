@@ -403,12 +403,11 @@ body.theme-dark .emoji-picker { background: #262626; border-color: #3d3d3d; }
 
 /* ---------- Version label (landing) ---------- */
 .landing-inner { position: relative; display: flex; flex-direction: column; align-items: center; gap: 28px; }
-/* Sketch above the Start button. The drawing is black-on-white, so it is inverted to sit on the dark page.
-   Delete the "filter" and "mix-blend-mode" values to show it with its original colours. */
+/* Sketch above the Start button. source/draft-dark.png already has a transparent background
+   and light lines, so no CSS filter is needed (works even if an old stylesheet is cached). */
 .landing-art {
   display: block; width: min(560px, 82vw); height: auto; max-height: min(44vh, 360px);
-  object-fit: contain; user-select: none;
-  filter: invert(1); mix-blend-mode: screen; opacity: .9;
+  object-fit: contain; user-select: none; opacity: .9;
 }
 .version {
   position: absolute; top: 100%; left: 50%; transform: translateX(-50%);

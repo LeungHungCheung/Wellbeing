@@ -894,7 +894,10 @@
   function syncChrome() {
     const popupOpen = popups.some((p) => !p.classList.contains('hidden'));
     const inChat = !viewConversation.classList.contains('hidden') && !chat.classList.contains('hidden');
+    // the clock hides for the whole chat page; the "?" stays on the page that waits for the first message
+    const chatActive = inChat && !chat.classList.contains('is-new');
     body.classList.toggle('chrome-hidden', popupOpen || inChat);
+    body.classList.toggle('help-hidden', popupOpen || chatActive);
 
     const inForum = !viewForum.classList.contains('hidden');
     backTop.classList.toggle('show', inForum && !popupOpen && window.scrollY > 240);

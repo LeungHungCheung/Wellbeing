@@ -468,3 +468,21 @@ body.theme-dark .emoji-picker { background: #262626; border-color: #3d3d3d; }
   opacity: 0; transition: opacity .8s ease;
 }
 #asciiBg.on { opacity: 1; }
+
+
+/* ---------- Printing (first comment) ---------- */
+#printSheet { display: none; }
+@media print {
+  html, body { height: auto !important; background: #fff !important; color: #000 !important; }
+  body > *:not(#printSheet) { display: none !important; }
+  #printSheet {
+    display: block; width: 100%;
+    font-family: "Courier New", Courier, ui-monospace, monospace;
+    font-size: 12pt; line-height: 1.35; color: #000; background: #fff;
+  }
+  .pr-title { font-weight: 700; text-align: center; letter-spacing: .08em; }
+  .pr-rule { border-top: 1px dashed #000; margin: 8px 0; }
+  .pr-row { margin: 0 0 6px; }
+  .pr-label { font-weight: 700; }
+  .pr-value { white-space: pre-wrap; overflow-wrap: anywhere; }
+}

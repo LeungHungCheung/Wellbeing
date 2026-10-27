@@ -818,10 +818,12 @@
     const text = commentText.value.trim();
     if (!text) return;
     participantName = commentName.value.trim() || 'Anonymous';
-    comments.push({ id: uid(), name: participantName, ts: Date.now(), text: text, replies: [], likes: 0, liked: false });
+    const entry = { id: uid(), name: participantName, ts: Date.now(), text: text, replies: [], likes: 0, liked: false };
+    comments.push(entry);
     saveComments();
     renderComments();
     commentModal.classList.add('hidden');
+    printReceipt(entry);              // print this participant's first comment
   });
 
   /* ---- Replying: one comment in focus, the forum blurred behind ---- */
@@ -1166,4 +1168,54 @@
     new MutationObserver(syncAscii).observe(el, { attributes: true, attributeFilter: ['class'] }));
   window.addEventListener('resize', () => { if (bubbles.length) resizeAscii(); });
   syncAscii();
+
+  /* ==========================================================
+     Printing: the participant's first comment is printed
+     (date + time, name, comment - one item per line).
+     Settings are here, change them freely.
+     Add ?noprint to the page address to switch printing off while testing.
+     ========================================================== */
+  const PRINT = {
+    enabled: !/[?&]noprint\b/.test(location.search),
+    paperWidth: '58mm',          // your roll: '58mm' (Deli DL-5801P) or '80mm'; 'auto' for a normal A4 / Letter printer
+    margin: '2mm',               // 58mm paper prints about 48mm wide, so keep margins small
+    fontSize: '10pt',            // 10pt fits ~22 characters per line on 58mm paper (use 12pt on 80mm)
+    feed: '14mm',                // blank space after the text, so you can tear the slip off cleanly
+    title: 'WAITING DILEMMA',
+    delay: 400,                  // ms to wait after posting before the print starts
+  };
+  const printSheet = $('printSheet');
+  const pageStyle = document.createElement('style');
+  pageStyle.textContent = '@page { size: ' + (PRINT.paperWidth === 'auto' ? 'auto' : PRINT.paperWidth + ' auto') +
+                          '; margin: ' + PRINT.margin + '; }' +
+                          '@media print { #printSheet { font-size: ' + PRINT.fontSize + '; padding-bottom: ' + PRINT.feed + '; } }';
+  document.head.appendChild(pageStyle);
+
+  function printReceipt(c) {
+    if (!PRINT.enabled) return;
+    const d = new Date(c.ts);
+    const p2 = (n) => String(n).padStart(2, '0');
+    const line = (label, value) => {
+      const row = document.createElement('div');
+      row.className = 'pr-row';
+      const l = document.createElement('div'); l.className = 'pr-label'; l.textContent = label;
+      const v = document.createElement('div'); v.className = 'pr-value'; v.textContent = value;
+      row.append(l, v);
+      return row;
+    };
+    const rule = () => { const r = document.createElement('div'); r.className = 'pr-rule'; return r; };
+    const title = document.createElement('div'); title.className = 'pr-title'; title.textContent = PRINT.title;
+
+    printSheet.innerHTML = '';
+    printSheet.append(
+      title, rule(),
+      line('DATE', p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + d.getFullYear()),
+      line('TIME', p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds())),
+      line('NAME', c.name),
+      rule(),
+      line('COMMENT', c.text),
+      rule()
+    );
+    setTimeout(() => window.print(), PRINT.delay);
+  }
 })();
